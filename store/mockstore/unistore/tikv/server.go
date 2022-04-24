@@ -51,6 +51,11 @@ type Server struct {
 	stopped       int32
 }
 
+func (svr *Server) CoprocessorBucket(request *coprocessor.Request, server tikvpb.Tikv_CoprocessorBucketServer) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 // NewServer returns a new server.
 func NewServer(rm RegionManager, store *MVCCStore, innerServer InnerServer) *Server {
 	return &Server{
