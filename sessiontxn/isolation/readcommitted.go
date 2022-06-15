@@ -33,6 +33,7 @@ import (
 type stmtState struct {
 	stmtTS            uint64
 	stmtTSFuture      oracle.Future
+	rcCheckTS         bool
 	stmtUseStartTS    bool
 	onNextRetryOrStmt func() error
 }
@@ -117,7 +118,7 @@ func (p *PessimisticRCTxnContextProvider) prepareStmtTS() {
 	switch {
 	case p.stmtUseStartTS:
 		stmtTSFuture = sessiontxn.FuncFuture(p.getTxnStartTS)
-	case p.availableRCCheckTS != 0 && sessVars.StmtCtx.RCCheckTS:
+	case p.availableRCCheckTS != 0 && p.rcCheckTS:
 		stmtTSFuture = sessiontxn.ConstantFuture(p.availableRCCheckTS)
 	default:
 		stmtTSFuture = sessiontxn.NewOracleFuture(p.ctx, p.sctx, sessVars.TxnCtx.TxnScope)
@@ -155,7 +156,7 @@ func (p *PessimisticRCTxnContextProvider) getStmtTS() (ts uint64, err error) {
 // At this point the query will be retried from the beginning.
 func (p *PessimisticRCTxnContextProvider) handleAfterQueryError(queryErr error) (sessiontxn.StmtErrorAction, error) {
 	sessVars := p.sctx.GetSessionVars()
-	if sessVars.StmtCtx.RCCheckTS && errors.ErrorEqual(queryErr, kv.ErrWriteConflict) {
+	if p.rcCheckTS && errors.ErrorEqual(queryErr, kv.ErrWriteConflict) {
 		logutil.Logger(p.ctx).Info("RC read with ts checking has failed, retry RC read",
 			zap.String("sql", sessVars.StmtCtx.OriginalSQL))
 		return sessiontxn.RetryReady()
@@ -206,4 +207,12 @@ func (p *PessimisticRCTxnContextProvider) AdviseWarmup() error {
 	}
 	p.prepareStmtTS()
 	return nil
+}
+
+func (p *PessimisticRCTxnContextProvider) SetRCCheckTS() {
+	p.rcCheckTS = true
+}
+
+func (p *PessimisticRCTxnContextProvider) SupportRCCheckTS() bool {
+	return p.rcCheckTS
 }

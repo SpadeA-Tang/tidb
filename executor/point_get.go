@@ -17,6 +17,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/sessiontxn"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -156,7 +157,7 @@ func (e *PointGetExecutor) Open(context.Context) error {
 	} else {
 		e.snapshot = e.ctx.GetSnapshotWithTS(snapshotTS)
 	}
-	if e.ctx.GetSessionVars().StmtCtx.RCCheckTS {
+	if sessiontxn.GetTxnManager(e.ctx).SupportRCCheckTS() {
 		e.snapshot.SetOption(kv.IsolationLevel, kv.RCCheckTS)
 	}
 	if e.cacheTable != nil {
@@ -174,7 +175,7 @@ func (e *PointGetExecutor) Open(context.Context) error {
 		e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.RegisterStats(e.id, e.stats)
 	}
 	readReplicaType := e.ctx.GetSessionVars().GetReplicaRead()
-	if readReplicaType.IsFollowerRead() && !e.ctx.GetSessionVars().StmtCtx.RCCheckTS {
+	if readReplicaType.IsFollowerRead() && !sessiontxn.GetTxnManager(e.ctx).SupportRCCheckTS() {
 		e.snapshot.SetOption(kv.ReplicaRead, readReplicaType)
 	}
 	e.snapshot.SetOption(kv.TaskID, e.ctx.GetSessionVars().StmtCtx.TaskID)

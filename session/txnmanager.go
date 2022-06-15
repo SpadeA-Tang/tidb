@@ -129,6 +129,14 @@ func (m *txnManager) AdviseOptimizeWithPlan(plan interface{}) error {
 	return nil
 }
 
+func (m *txnManager) SupportRCCheckTS() bool {
+	provider := m.GetContextProvider()
+	if provider, ok := provider.(*isolation.PessimisticRCTxnContextProvider); ok {
+		return provider.SupportRCCheckTS()
+	}
+	return false
+}
+
 func (m *txnManager) newProviderWithRequest(r *sessiontxn.EnterNewTxnRequest) sessiontxn.TxnContextProvider {
 	if r.Provider != nil {
 		return r.Provider

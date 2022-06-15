@@ -17,6 +17,8 @@ package executor
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/sessiontxn"
+	"github.com/pingcap/tidb/sessiontxn/isolation"
 	"math"
 	"runtime/pprof"
 	"runtime/trace"
@@ -1904,10 +1906,14 @@ func ResetContextOfStmt(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 			sc.NotFillCache = !opts.SQLCache
 		}
 		sc.WeakConsistency = isWeakConsistencyRead(ctx, stmt)
-		// Try to mark the `RCCheckTS` flag for the first time execution of in-transaction read requests
-		// using read-consistency isolation level.
-		if NeedSetRCCheckTSFlag(ctx, stmt) {
-			sc.RCCheckTS = true
+
+		provider := sessiontxn.GetTxnManager(ctx).GetContextProvider()
+		if provider, ok := provider.(*isolation.PessimisticRCTxnContextProvider); ok {
+			// Try to mark the `RCCheckTS` flag for the first time execution of in-transaction read requests
+			// using read-consistency isolation level.
+			if NeedSetRCCheckTSFlag(ctx, stmt) {
+				provider.SetRCCheckTS()
+			}
 		}
 	case *ast.SetOprStmt:
 		sc.InSelectStmt = true
@@ -2047,7 +2053,7 @@ func isWeakConsistencyRead(ctx sessionctx.Context, node ast.Node) bool {
 func NeedSetRCCheckTSFlag(ctx sessionctx.Context, node ast.Node) bool {
 	sessionVars := ctx.GetSessionVars()
 	if sessionVars.ConnectionID > 0 && sessionVars.RcReadCheckTS && sessionVars.InTxn() &&
-		sessionVars.IsPessimisticReadConsistency() && !sessionVars.RetryInfo.Retrying && plannercore.IsReadOnly(node, sessionVars) {
+		!sessionVars.RetryInfo.Retrying && plannercore.IsReadOnly(node, sessionVars) {
 		return true
 	}
 	return false

@@ -17,6 +17,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/sessiontxn"
 	"sort"
 	"sync/atomic"
 
@@ -117,7 +118,7 @@ func (e *BatchPointGetExec) Open(context.Context) error {
 	} else {
 		snapshot = e.ctx.GetSnapshotWithTS(e.snapshotTS)
 	}
-	if e.ctx.GetSessionVars().StmtCtx.RCCheckTS {
+	if sessiontxn.GetTxnManager(e.ctx).SupportRCCheckTS() {
 		snapshot.SetOption(kv.IsolationLevel, kv.RCCheckTS)
 	}
 	if e.cacheTable != nil {
@@ -132,7 +133,7 @@ func (e *BatchPointGetExec) Open(context.Context) error {
 		stmtCtx.RuntimeStatsColl.RegisterStats(e.id, e.stats)
 	}
 	replicaReadType := e.ctx.GetSessionVars().GetReplicaRead()
-	if replicaReadType.IsFollowerRead() && !e.ctx.GetSessionVars().StmtCtx.RCCheckTS {
+	if replicaReadType.IsFollowerRead() && !sessiontxn.GetTxnManager(e.ctx).SupportRCCheckTS() {
 		snapshot.SetOption(kv.ReplicaRead, replicaReadType)
 	}
 	snapshot.SetOption(kv.TaskID, stmtCtx.TaskID)

@@ -143,6 +143,8 @@ type TxnManager interface {
 	GetStmtForUpdateTS() (uint64, error)
 	// GetContextProvider returns the current TxnContextProvider
 	GetContextProvider() TxnContextProvider
+	// SupportRCCheckTS returns whether the txn support RCCheckTS
+	SupportRCCheckTS() bool
 
 	// EnterNewTxn enters a new transaction.
 	EnterNewTxn(ctx context.Context, req *EnterNewTxnRequest) error
