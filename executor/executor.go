@@ -1005,6 +1005,11 @@ func (e *SelectLockExec) Open(ctx context.Context) error {
 // Next implements the Executor Next interface.
 func (e *SelectLockExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	req.GrowAndReset(e.maxChunkSize)
+
+	failpoint.Inject("hookBeforeRunChildrenNextInSelectLock", func() {
+		sessiontxn.ExecTestHook(e.ctx, sessiontxn.HookBeforeRunChildrenNextInSelectLock)
+	})
+
 	err := Next(ctx, e.children[0], req)
 	if err != nil {
 		return err

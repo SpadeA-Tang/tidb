@@ -16,7 +16,10 @@ package sessiontxn_test
 
 import (
 	"context"
+	"fmt"
+	"github.com/pingcap/failpoint"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
@@ -303,4 +306,92 @@ func checkInfoSchemaVersion(t *testing.T, sctx sessionctx.Context, ver int64) {
 
 	require.Equal(t, ver, is1.SchemaMetaVersion())
 	require.Equal(t, ver, is2.SchemaMetaVersion())
+}
+
+func TestConflictErrorInOtherQueryContainingPointGet111(t *testing.T) {
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/executor/hookBeforeRunChildrenNextInSelectLock", "return"))
+	store, _, clean := testkit.CreateMockStoreAndDomain(t)
+	defer clean()
+
+	tk := testkit.NewTestKit(t, store)
+	se := tk.Session()
+	//tk2 := testkit.NewTestKit(t, store)
+
+	wait := func(ch chan string, expect string) {
+		select {
+		case got := <-ch:
+			if got != expect {
+				panic(fmt.Sprintf("expect '%s', got '%s'", expect, got))
+			}
+		case <-time.After(time.Second * 10):
+			panic("wait2 timeout")
+		}
+	}
+
+	chanBeforeRunNextInSelectLock := make(chan func(), 1)
+	c2 := make(chan string, 1)
+	c3 := make(chan string, 1)
+
+	se.SetValue(sessiontxn.HookBeforeRunChildrenNextInSelectLock, chanBeforeRunNextInSelectLock)
+
+	chanBeforeRunNextInSelectLock <- func() {
+		c2 <- "before run children's next in select lock"
+		wait(c3, "insert done")
+	}
+
+	tk.MustExec("use test")
+	//tk2.MustExec("use test")
+	tk.MustExec("create table t (id int primary key, v int)")
+
+	go func() {
+		tk2 := testkit.NewTestKit(t, store)
+		tk2.MustExec("use test")
+
+		wait(c2, "before run children's next in select lock")
+		tk2.MustExec("insert into t values (1, 1), (2,2),(3,3),(4,4)")
+		c3 <- "insert done"
+
+	}()
+	//tk2.MustExec("insert into t values (1, 1), (2,2),(3,3),(4,4)")
+
+	tk.MustExec("begin pessimistic")
+	//tk2.MustExec("insert into t values (1, 1), (2,2)")
+	//tk2.MustExec("update t set v = v + 5 where id = 1")
+	//tk.MustQuery("select * from t where id=1 for update union all select * from t where id = 2 for update").Check(testkit.Rows("1 1", "2 2"))
+	tk.MustQuery("select * from t for update").Check(testkit.Rows("1 1", "2 2", "1 1", "2 2"))
+	//tk.MustExec("select * from t where id = 1 and v > 1 for update")
+	//tk.MustExec("select * from t where id in (1, 2, 3) order by id for update")
+	//records, ok := se.Value(sessiontxn.AssertLockErr).(map[string]int)
+	//require.True(t, ok)
+	//require.Equal(t, records["errWriteConflict"], 1)
+
+	tk.MustExec("rollback")
+}
+
+func TestConflictErrorInOtherQueryContainingPointGet11o1(t *testing.T) {
+	store, _, clean := testkit.CreateMockStoreAndDomain(t)
+	defer clean()
+
+	tk := testkit.NewTestKit(t, store)
+
+	tk2 := testkit.NewTestKit(t, store)
+
+	tk.MustExec("use test")
+	tk2.MustExec("use test")
+	tk.MustExec("create table t (id int primary key, v int)")
+
+	//tk2.MustExec("insert into t values (1, 1), (2,2),(3,3),(4,4)")
+
+	tk.MustExec("begin pessimistic")
+	tk2.MustExec("insert into t values (1, 1), (2,2)")
+	//tk2.MustExec("update t set v = v + 5 where id = 1")
+	//tk.MustQuery("select * from t where id = 1 for update").Check(testkit.Rows("1 1"))
+	tk.MustQuery("select * from t where id=1 for update union all select * from t where id = 2 for update").Check(testkit.Rows("1 1", "2 2"))
+	//tk.MustExec("select * from t where id = 1 and v > 1 for update")
+	//tk.MustExec("select * from t where id in (1, 2, 3) order by id for update")
+	//records, ok := se.Value(sessiontxn.AssertLockErr).(map[string]int)
+	//require.True(t, ok)
+	//require.Equal(t, records["errWriteConflict"], 1)
+
+	tk.MustExec("rollback")
 }

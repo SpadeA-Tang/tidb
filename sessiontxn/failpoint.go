@@ -47,6 +47,8 @@ var HookAfterOnStmtRetryWithLockErrorKey stringutil.StringerStr = "testHookKeyAf
 // Only for test
 var AssertLockErr stringutil.StringerStr = "assertLockError"
 
+var HookBeforeRunChildrenNextInSelectLock stringutil.StringerStr = "hookBeforeRunChildrenNextInSelectLock"
+
 // RecordAssert is used only for test
 func RecordAssert(sctx sessionctx.Context, name string, value interface{}) {
 	records, ok := sctx.Value(AssertRecordsKey).(map[string]interface{})
