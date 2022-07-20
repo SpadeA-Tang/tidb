@@ -17,6 +17,7 @@ package sessiontxn_test
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/types"
 	"testing"
 	"time"
 
@@ -701,4 +702,47 @@ func TestTxnContextPreparedStmtWithForUpdate(t *testing.T) {
 
 	se.SetValue(sessiontxn.AssertTxnInfoSchemaKey, nil)
 	tk.MustExec("rollback")
+}
+
+func TestTSOPrepareExecute(t *testing.T) {
+	store, clean := testkit.CreateMockStore(t)
+	defer clean()
+
+	ctx := context.Background()
+	tk := testkit.NewTestKit(t, store)
+
+	//rs, err := se.ExecutePreparedStmt(ctx, stmtID, []types.Datum{types.NewDatum(64)})
+
+	tk.MustExec("use test")
+	tk.MustExec("drop table if exists t1")
+	tk.MustExec("drop table if exists t2")
+	tk.MustExec("drop table if exists t3")
+
+	tk.MustExec("create table t1(id int, v int, v2 int, primary key (id), unique key uk (v))")
+	tk.MustExec("create table t2(id int, v int, unique key i1(v))")
+	tk.MustExec("create table t3(id int, v int, key i1(v))")
+
+	sqlSelectId, _, _, _ := tk.Session().PrepareStmt("select * from t1 where id = ? for update")
+	sqlUpdateId, _, _, _ := tk.Session().PrepareStmt("update t1 set v = v + 10 where id = ?")
+	sqlInsertId1, _, _, _ := tk.Session().PrepareStmt("insert into t2 values(?, ?)")
+	sqlInsertId2, _, _, _ := tk.Session().PrepareStmt("insert into t3 values(?, ?)")
+
+	tk.MustExec("insert into t1 values (1, 1, 1)")
+
+	for i := 1; i < 10000; i++ {
+		tk.MustExec("begin pessimistic")
+		stmt, err := tk.Session().ExecutePreparedStmt(ctx, sqlSelectId, []types.Datum{types.NewDatum(1)})
+		require.NoError(t, err)
+		require.NoError(t, stmt.Close())
+		_, err = tk.Session().ExecutePreparedStmt(ctx, sqlUpdateId, []types.Datum{types.NewDatum(1)})
+		_, err = tk.Session().ExecutePreparedStmt(ctx, sqlInsertId1, []types.Datum{types.NewDatum(i * 10), types.NewDatum(i * 10)})
+		_, err = tk.Session().ExecutePreparedStmt(ctx, sqlInsertId2, []types.Datum{types.NewDatum(i * 10), types.NewDatum(i * 10)})
+		require.NoError(t, err)
+		tk.MustExec("commit")
+	}
+
+	fmt.Println(session.TsoCmdCount)
+	fmt.Println(executor.TsoCmdCountAdapter)
+	fmt.Println(sessiontxn.TsoCmdTxn)
+	//require.Equal(t, int32(19), session.WaitCount)
 }
