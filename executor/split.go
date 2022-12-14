@@ -650,6 +650,7 @@ func getPhysicalTableRegions(physicalTableID int64, tableInfo *model.TableInfo, 
 	for _, region := range recordRegionMetas {
 		logutil.BgLogger().Info("--",
 			zap.Uint64("regionId", region.GetID()),
+			zap.Any("region", region.GetMeta()),
 		)
 	}
 	if err != nil {
