@@ -130,7 +130,8 @@ func (c *RegionCache) SplitKeyRangesByLocations(bo *Backoffer, ranges *KeyRanges
 			zap.Any("key", ranges.At(0).StartKey))
 		loc, err := c.LocateKey(bo.TiKVBackoffer(), ranges.At(0).StartKey)
 		logutil.BgLogger().Info("After LocateKey",
-			zap.Any("key", ranges.At(0).StartKey))
+			zap.Any("key", ranges.At(0).StartKey),
+			zap.Uint64("regionId", loc.Region.GetID()))
 		if err != nil {
 			return res, derr.ToTiDBErr(err)
 		}

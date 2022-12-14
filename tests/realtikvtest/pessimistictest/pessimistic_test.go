@@ -76,6 +76,20 @@ func setLockTTL(v uint64) lockTTL { return lockTTL(atomic.SwapUint64(&transactio
 
 func (v lockTTL) restore() { atomic.StoreUint64(&transaction.ManagedLockTTL, uint64(v)) }
 
+func TestTmp(t *testing.T) {
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("drop table if exists pessimistic")
+	tk.MustExec("create table pessimistic (k int, v int)")
+	tk.MustExec("insert into pessimistic values (1, 1)")
+
+	res := tk.MustQuery("show table pessimistic regions")
+	fmt.Println(res)
+}
+
 func TestPessimisticTxn(t *testing.T) {
 	store := realtikvtest.CreateMockStoreAndSetup(t)
 
