@@ -309,6 +309,10 @@ func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *KeyRanges, req *kv
 	logutil.BgLogger().Info("After SplitKeyRangesByBuckets",
 		zap.Any("kvRequest", req),
 		zap.Any("ranges", ranges))
+	for _, loc := range locs {
+		logutil.BgLogger().Info("+++",
+			zap.Any("regionId", loc.Location.Region.GetID()))
+	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
