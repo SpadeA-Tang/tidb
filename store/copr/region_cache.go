@@ -126,7 +126,11 @@ func (l *LocationKeyRanges) splitKeyRangesByBuckets() []*LocationKeyRanges {
 func (c *RegionCache) SplitKeyRangesByLocations(bo *Backoffer, ranges *KeyRanges) ([]*LocationKeyRanges, error) {
 	res := make([]*LocationKeyRanges, 0)
 	for ranges.Len() > 0 {
+		logutil.BgLogger().Info("Before LocateKey",
+			zap.Any("key", ranges.At(0).StartKey))
 		loc, err := c.LocateKey(bo.TiKVBackoffer(), ranges.At(0).StartKey)
+		logutil.BgLogger().Info("After LocateKey",
+			zap.Any("key", ranges.At(0).StartKey))
 		if err != nil {
 			return res, derr.ToTiDBErr(err)
 		}

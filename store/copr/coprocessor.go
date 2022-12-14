@@ -302,7 +302,13 @@ func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *KeyRanges, req *kv
 	rangesLen := ranges.Len()
 
 	// TODO(youjiali1995): is there any request type that needn't be splitted by buckets?
+	logutil.BgLogger().Info("Before SplitKeyRangesByBuckets",
+		zap.Any("kvRequest", req),
+		zap.Any("ranges", ranges))
 	locs, err := cache.SplitKeyRangesByBuckets(bo, ranges)
+	logutil.BgLogger().Info("After SplitKeyRangesByBuckets",
+		zap.Any("kvRequest", req),
+		zap.Any("ranges", ranges))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
