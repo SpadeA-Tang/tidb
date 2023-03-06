@@ -304,6 +304,8 @@ type Config struct {
 	TiDBMaxReuseColumn uint32 `toml:"tidb-max-reuse-column" json:"tidb-max-reuse-column"`
 	// TiDBEnableExitCheck indicates whether exit-checking in domain for background process
 	TiDBEnableExitCheck bool `toml:"tidb-enable-exit-check" json:"tidb-enable-exit-check"`
+	// CoprocessorRequestTimeout ...
+	CoprocessorRequestTimeout string
 }
 
 // UpdateTempStoragePath is to update the `TempStoragePath` if port/statusPort was changed
@@ -318,19 +320,21 @@ func (c *Config) UpdateTempStoragePath() {
 
 // GetTiKVConfig returns configuration options from tikvcfg
 func (c *Config) GetTiKVConfig() *tikvcfg.Config {
+	timeout, _ := time.ParseDuration(c.CoprocessorRequestTimeout)
 	return &tikvcfg.Config{
-		CommitterConcurrency:  int(tikvutil.CommitterConcurrency.Load()),
-		MaxTxnTTL:             c.Performance.MaxTxnTTL,
-		TiKVClient:            c.TiKVClient,
-		Security:              c.Security.ClusterSecurity(),
-		PDClient:              c.PDClient,
-		PessimisticTxn:        tikvcfg.PessimisticTxn{MaxRetryCount: c.PessimisticTxn.MaxRetryCount},
-		TxnLocalLatches:       c.TxnLocalLatches,
-		StoresRefreshInterval: c.StoresRefreshInterval,
-		OpenTracingEnable:     c.OpenTracing.Enable,
-		Path:                  c.Path,
-		EnableForwarding:      c.EnableForwarding,
-		TxnScope:              c.Labels["zone"],
+		CommitterConcurrency:      int(tikvutil.CommitterConcurrency.Load()),
+		MaxTxnTTL:                 c.Performance.MaxTxnTTL,
+		TiKVClient:                c.TiKVClient,
+		Security:                  c.Security.ClusterSecurity(),
+		PDClient:                  c.PDClient,
+		PessimisticTxn:            tikvcfg.PessimisticTxn{MaxRetryCount: c.PessimisticTxn.MaxRetryCount},
+		TxnLocalLatches:           c.TxnLocalLatches,
+		StoresRefreshInterval:     c.StoresRefreshInterval,
+		OpenTracingEnable:         c.OpenTracing.Enable,
+		Path:                      c.Path,
+		EnableForwarding:          c.EnableForwarding,
+		TxnScope:                  c.Labels["zone"],
+		CoprocessorRequestTimeout: timeout,
 	}
 }
 
@@ -1043,6 +1047,7 @@ var defaultConf = Config{
 	TiDBMaxReuseChunk:                    64,
 	TiDBMaxReuseColumn:                   256,
 	TiDBEnableExitCheck:                  false,
+	CoprocessorRequestTimeout:            "5m",
 }
 
 var (
@@ -1384,6 +1389,10 @@ func (c *Config) Valid() error {
 		if c.TiFlashComputeAutoScalerAddr == "" {
 			return fmt.Errorf("autoscaler-addr cannot be empty when disaggregated-tiflash mode is true")
 		}
+	}
+
+	if _, err := time.ParseDuration(c.CoprocessorRequestTimeout); err != nil {
+		return fmt.Errorf("xxx")
 	}
 
 	// test log level

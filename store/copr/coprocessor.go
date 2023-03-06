@@ -17,6 +17,7 @@ package copr
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/config"
 	"math"
 	"strconv"
 	"strings"
@@ -1168,8 +1169,8 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 	if len(worker.req.MatchStoreLabels) > 0 {
 		ops = append(ops, tikv.WithMatchLabels(worker.req.MatchStoreLabels))
 	}
-	fmt.Printf("Cop timeout %v\n", worker.timeout)
-	resp, rpcCtx, storeAddr, err := worker.kvclient.SendReqCtx(bo.TiKVBackoffer(), req, task.region, worker.timeout, getEndPointType(task.storeType), task.storeAddr, ops...)
+	cfg := config.GetGlobalConfig().GetTiKVConfig()
+	resp, rpcCtx, storeAddr, err := worker.kvclient.SendReqCtx(bo.TiKVBackoffer(), req, task.region, cfg.CoprocessorRequestTimeout, getEndPointType(task.storeType), task.storeAddr, ops...)
 	err = derr.ToTiDBErr(err)
 	if err != nil {
 		if task.storeType == kv.TiDB {

@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/tikv/client-go/v2/tikv"
 	"math"
 	"runtime"
 	"strconv"
@@ -2395,23 +2394,6 @@ var defaultSysVars = []*SysVar{
 	}, GetGlobal: func(ctx context.Context, vars *SessionVars) (string, error) {
 		return strconv.Itoa(int(TTLRunningTasks.Load())), nil
 	}},
-	{Scope: ScopeGlobal | ScopeSession, Name: TiDBCoprocessorRequestTimeout, Value: tikv.ReadTimeoutMedium.String(), MinValue: 0, MaxValue: uint64(1 * time.Hour), Type: TypeDuration,
-		SetSession: func(s *SessionVars, val string) error {
-			d, err := time.ParseDuration(val)
-			if err != nil {
-				return err
-			}
-			s.CopRequestTimeout = d
-			return nil
-		},
-		SetGlobal: func(_ context.Context, s *SessionVars, val string) error {
-			d, err := time.ParseDuration(val)
-			if err != nil {
-				return err
-			}
-			s.CopRequestTimeout = d
-			return nil
-		}},
 }
 
 // FeedbackProbability points to the FeedbackProbability in statistics package.
