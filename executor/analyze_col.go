@@ -124,7 +124,6 @@ func (e *AnalyzeColumnsExec) buildResp(ranges []*ranger.Range) (distsql.SelectRe
 		SetConcurrency(e.concurrency).
 		SetMemTracker(e.memTracker).
 		SetResourceGroupName(e.ctx.GetSessionVars().ResourceGroupName).
-		SetCopRequestTimeout(e.ctx.GetSessionVars().CopRequestTimeout).
 		Build()
 	if err != nil {
 		return nil, err
