@@ -16,6 +16,7 @@ package copr
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"net"
@@ -1168,6 +1169,11 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 	}
 
 	cacheKey, cacheValue := worker.buildCacheKey(task, &copReq)
+	logutil.Logger(bo.GetCtx()).Info("handleTaskOnce, build cache key",
+		zap.Uint64("txnStartTS", worker.req.StartTs),
+		zap.Uint64("regionID", task.region.GetID()),
+		zap.String("cacheKey", hex.EncodeToString(cacheKey)),
+	)
 
 	replicaRead := worker.req.ReplicaRead
 	rgName := worker.req.ResourceGroupName
@@ -1648,9 +1654,21 @@ func (worker *copIteratorWorker) buildCacheKey(task *copTask, copReq *coprocesso
 			} else {
 				copReq.CacheIfMatchVersion = 0
 			}
+			logutil.BgLogger().Info("on buildCacheKey",
+				zap.Uint64("txnStartTS", worker.req.StartTs),
+				zap.Uint64("regionID", task.region.GetID()),
+				zap.String("cacheKey", hex.EncodeToString(cacheKey)),
+				zap.Uint64("cache_value_region", cValue.RegionID),
+				zap.Uint64("cache_value_version", cValue.RegionDataVersion),
+				zap.Uint64("cop_req_version", copReq.CacheIfMatchVersion),
+			)
 		} else {
 			logutil.BgLogger().Warn("Failed to build copr cache key", zap.Error(err))
 		}
+	} else {
+		logutil.BgLogger().Info("Not eligible to use cache",
+			zap.Uint64("rangeSize", uint64(len(copReq.Ranges))),
+		)
 	}
 	return
 }
