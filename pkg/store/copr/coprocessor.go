@@ -1238,6 +1238,8 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 	}
 	resp, rpcCtx, storeAddr, err := worker.kvclient.SendReqCtx(bo.TiKVBackoffer(), req, task.region,
 		timeout, getEndPointType(task.storeType), task.storeAddr, ops...)
+	logutil.BgLogger().Info("Get Cop response",
+		zap.String("cacheKey", PrintCacheKey(cacheKey)))
 	err = derr.ToTiDBErr(err)
 	if err != nil {
 		if task.storeType == kv.TiDB {
@@ -1631,6 +1633,14 @@ func (worker *copIteratorWorker) handleLockErr(bo *Backoffer, lockErr *kvrpcpb.L
 	return nil
 }
 
+func PrintCacheKey(cacheKey []byte) string {
+	size := len(cacheKey)
+	if size > 100 {
+		size = 100
+	}
+	return hex.EncodeToString(cacheKey[:size])
+}
+
 func (worker *copIteratorWorker) buildCacheKey(task *copTask, copReq *coprocessor.Request) (cacheKey []byte, cacheValue *coprCacheValue) {
 	// If there are many ranges, it is very likely to be a TableLookupRequest. They are not worth to cache since
 	// computing is not the main cost. Ignore requests with many ranges directly to avoid slowly building the cache key.
@@ -1649,7 +1659,7 @@ func (worker *copIteratorWorker) buildCacheKey(task *copTask, copReq *coprocesso
 				logutil.BgLogger().Info("on buildCacheKey, cache value may be matched",
 					zap.Uint64("txnStartTS", worker.req.StartTs),
 					zap.Uint64("regionID", task.region.GetID()),
-					zap.String("cacheKey", hex.EncodeToString(cacheKey)),
+					zap.String("cacheKey", PrintCacheKey(cacheKey)),
 					zap.Uint64("cache_value_region", cValue.RegionID),
 					zap.Uint64("cache_value_version", cValue.RegionDataVersion),
 					zap.Uint64("cop_req_version", copReq.CacheIfMatchVersion),
@@ -1665,7 +1675,7 @@ func (worker *copIteratorWorker) buildCacheKey(task *copTask, copReq *coprocesso
 				logutil.BgLogger().Info("on buildCacheKey, cache value not matched",
 					zap.Uint64("txnStartTS", worker.req.StartTs),
 					zap.Uint64("regionID", task.region.GetID()),
-					zap.String("cacheKey", hex.EncodeToString(cacheKey)),
+					zap.String("cacheKey", PrintCacheKey(cacheKey)),
 					zap.String("reason", notCachedReason),
 				)
 				copReq.CacheIfMatchVersion = 0
@@ -1715,6 +1725,8 @@ func (worker *copIteratorWorker) handleCopCache(task *copTask, resp *copResponse
 		return nil
 	}
 	copr_metrics.CoprCacheCounterMiss.Add(1)
+
+	cacheFailed := false
 	// Cache not hit or cache hit but not valid: update the cache if the response can be cached.
 	if cacheKey != nil && resp.pbResp.CanBeCached && resp.pbResp.CacheLastVersion > 0 {
 		if resp.detail != nil {
@@ -1733,10 +1745,29 @@ func (worker *copIteratorWorker) handleCopCache(task *copTask, resp *copResponse
 					newCacheValue.PageStart = append([]byte{}, r.GetStart()...)
 					newCacheValue.PageEnd = append([]byte{}, r.GetEnd()...)
 				}
-				worker.store.coprCache.Set(cacheKey, &newCacheValue)
+				setSuccess := worker.store.coprCache.Set(cacheKey, &newCacheValue)
+				logutil.BgLogger().Info("handleCopCache: cache key",
+					zap.String("cache_key", PrintCacheKey(cacheKey)),
+					zap.Uint64("region_id", task.region.GetID()),
+					zap.Bool("set_failed", setSuccess),
+				)
 			}
+		} else {
+			cacheFailed = true
 		}
+	} else {
+		cacheFailed = true
 	}
+
+	if cacheFailed {
+		logutil.BgLogger().Info("handleCopCache: fail to cache",
+			zap.String("cache_key", PrintCacheKey(cacheKey)),
+			zap.Uint64("region_id", task.region.GetID()),
+			zap.Bool("can_be_cached", resp.pbResp.CanBeCached),
+			zap.Uint64("cache_version", resp.pbResp.CacheLastVersion),
+		)
+	}
+
 	return nil
 }
 
