@@ -1169,11 +1169,6 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 	}
 
 	cacheKey, cacheValue := worker.buildCacheKey(task, &copReq)
-	logutil.Logger(bo.GetCtx()).Info("handleTaskOnce, build cache key",
-		zap.Uint64("txnStartTS", worker.req.StartTs),
-		zap.Uint64("regionID", task.region.GetID()),
-		zap.String("cacheKey", hex.EncodeToString(cacheKey)),
-	)
 
 	replicaRead := worker.req.ReplicaRead
 	rgName := worker.req.ResourceGroupName
@@ -1651,17 +1646,30 @@ func (worker *copIteratorWorker) buildCacheKey(task *copTask, copReq *coprocesso
 				// when request result is cached
 				copReq.CacheIfMatchVersion = cValue.RegionDataVersion
 				cacheValue = cValue
+				logutil.BgLogger().Info("on buildCacheKey, cache value may be matched",
+					zap.Uint64("txnStartTS", worker.req.StartTs),
+					zap.Uint64("regionID", task.region.GetID()),
+					zap.String("cacheKey", hex.EncodeToString(cacheKey)),
+					zap.Uint64("cache_value_region", cValue.RegionID),
+					zap.Uint64("cache_value_version", cValue.RegionDataVersion),
+					zap.Uint64("cop_req_version", copReq.CacheIfMatchVersion),
+				)
 			} else {
+				notCachedReason := "value nil"
+				if cValue != nil && cValue.RegionID != task.region.GetID() {
+					notCachedReason = fmt.Sprintf("region_id not matched, value region id %v", cValue.RegionID)
+				}
+				if cValue != nil && cValue.TimeStamp > worker.req.StartTs {
+					notCachedReason = fmt.Sprintf("value ts is larger than task ts, value ts %v", cValue.TimeStamp)
+				}
+				logutil.BgLogger().Info("on buildCacheKey, cache value not matched",
+					zap.Uint64("txnStartTS", worker.req.StartTs),
+					zap.Uint64("regionID", task.region.GetID()),
+					zap.String("cacheKey", hex.EncodeToString(cacheKey)),
+					zap.String("reason", notCachedReason),
+				)
 				copReq.CacheIfMatchVersion = 0
 			}
-			logutil.BgLogger().Info("on buildCacheKey",
-				zap.Uint64("txnStartTS", worker.req.StartTs),
-				zap.Uint64("regionID", task.region.GetID()),
-				zap.String("cacheKey", hex.EncodeToString(cacheKey)),
-				zap.Uint64("cache_value_region", cValue.RegionID),
-				zap.Uint64("cache_value_version", cValue.RegionDataVersion),
-				zap.Uint64("cop_req_version", copReq.CacheIfMatchVersion),
-			)
 		} else {
 			logutil.BgLogger().Warn("Failed to build copr cache key", zap.Error(err))
 		}
